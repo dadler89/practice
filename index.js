@@ -29,15 +29,19 @@ axios
 //   })
 //   .then(response => console.log(response.data));
 
-// axios
-//   .get(
-//     `https://api.openweathermap.org/data/2.5/weather?q=${process.env.OPEN_wEATHER}`
-//   )
-//   .then(response => {
-//     state.Home.weather.city = response.name;
-//     state.Home.weather.temp = response.main.temp;
-//     state.Home.weather.description = response.weather.main;
-//   });
+axios
+  .get(
+    `https://api.openweathermap.org/data/2.5/weather?q=${process.env.OPEN_WEATHER}&q=st.%20louis`
+  )
+  .then(response => {
+    state.Home.weather.city = response.name;
+    state.Home.weather.temp = response.main.temp;
+    state.Home.weather.feelsLike = response.data.main.fells_like;
+    state.Home.weather.description = response.data.weather[0].main;
+  })
+  .catch(err => console.log(err));
+
+
 
 
 
@@ -65,31 +69,32 @@ router
   })
   .resolve();
 
-function addPicOnFormSubmit(st) {
-  if (st.view === "Form") {
-    document.querySelector("form").addEventListener("submit", event => {
-      event.preventDefault();
-      // convert HTML elements to Array
-      let inputList = Array.from(event.target.elements);
-      // remove submit button from list
-      inputList.pop();
-      // construct new picture object
-      let newPic = inputList.reduce((pictureObject, input) => {
-        pictureObject[input.name] = input.value;
-        return pictureObject;
-      }, {});
-      // add new picture to state.Gallery.pictures
-      state.Gallery.pictures.push(newPic);
-      render(state.Gallery);
-    });
-  }
-}
 
-function addNavEventListeners() {
-  // add menu toggle to bars icon in nav bar
-  document
-    .querySelector(".fa-bars")
-    .addEventListener("click", () =>
-      document.querySelector("nav > ul").classList.toggle("hidden--mobile")
-    );
-}
+  function addPicOnFormSubmit(st) {
+    if (st.view === "Form") {
+      document.querySelector("form").addEventListener("submit", event => {
+        event.preventDefault();
+        // convert HTML elements to Array
+        let inputList = Array.from(event.target.elements);
+        // remove submit button from list
+        inputList.pop();
+        // construct new picture object
+        let newPic = inputList.reduce((pictureObject, input) => {
+          pictureObject[input.name] = input.value;
+          return pictureObject;
+        }, {});
+        // add new picture to state.Gallery.pictures
+        state.Gallery.pictures.push(newPic);
+        render(state.Gallery);
+      });
+    }
+  }
+
+  function addNavEventListeners() {
+    // add menu toggle to bars icon in nav bar
+    document
+      .querySelector(".fa-bars")
+      .addEventListener("click", () =>
+        document.querySelector("nav > ul").classList.toggle("hidden--mobile")
+      );
+  }

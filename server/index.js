@@ -1,154 +1,70 @@
-const path = require("path");
-const FileSync = require("lowdb/adapters/FileSync");
-const lodashId = require("lodash-id");
-const lowdb = require("lowdb");
-const http = require("http");
+const express = require('express')
+const bodyParser = require('body-parser')
+const cors = require('cors')
+const mongoose = require('mongoose')
+mongoose.connect('mongodb://localhost/test')
+const db = mongoose.connection
 
+const app = express()
+const port = 3000
 
-const PORT = 4040;
+app.use(bodyParser.json())
+app.use(cors())
 
-const server = http.createServer((request, response) => {
+let db_status = 'MongoDB connection not successful'
 
-    // set the content type for our response
-    response.setHeader("Content-Type", "application/json");
+db.on('error', console.error.bind(console, 'connection error:'))
+db.once('open', () => db_status = 'Successful opened connection to Mongo!')
 
-    if (request.url.startsWith("/posts")) {
-      // use the request method to access the corresponding handler
-      const handler = HANDLERS[request.method];
+const postSchema = new mongoose.Schema({
+    title: String,
+    body: String
+})
 
-      // if the handler function exists,
-      if (handler) {
-        // handle the request and response
-        handler(request, response);
-      } else {
-        // if request method not found in the HANDLERS object,
-        notFound(response);
-      }
-    } else {
-      // if request url doesn't start with "/posts",
-      notFound(response);
-    }
-  });
+const Post = mongoose.model('Post', postSchema)
 
-server.listen(PORT)
-console.log(`Listening on port ${PORT}`)
+app.get('/', (req,res) => res.send(db_status))
 
-const HANDLERS = {
-  POST(request, response) {
-    // construct contents of request data
-    let contents = ""
-    request.on("data", (chunk) => (contents += chunk));
+app.post('/posts', (req, res) => {
+    const newPost = new Post(req.body)
+    newPost.save((error, post) => {
+        return error ? res.sendStatus().json(error) : res.json(post)
+    })
+})
 
-    request.on("end", () => {
-      // create/write new post in the db
-      const post = db.get("posts").insert({ body: contents }).write();
-      // send ok response with constructed post data
-      ok(response, post);
-    });
+app.get('/posts', (req, res) => {
+    Post.find({}, (error, data) => {
+        if (error) return res.sendStatus(500).json(error)
+        return res.json(data)
+    })
+})
 
-    // use internal server error response if error interrupts request
-    request.on("error", () => internalServerError(response));
-  },
-  GET(request, response) {
-    const posts = db.get("posts");
+app.get('/posts/:postId', (req, res) => {
+    Post.findById(req.params.postId, (error, data) => {
+        if (error) return res.sendStatus(500).json(error)
+        return res.json(data)
+    })
+})
 
-    if (request.url === "/posts") {
-      // only send back the entire collection when the URL matches /posts exactly
-      ok(response, { posts: posts.value() });
-    } else {
-      // otherwise, split up the url by '/' to try to find a post ID
-      const parts = request.url.split("/");
+app.put('/posts/:postId', (req, res) => {
+    Post.findByIdAndUpdate(
+        req.params.postId,
+        {$set: {title: req.body.title, body: req.body.body}},
+        (error, data) => {
+            if (error) return res.sendStatus(500).json(error)
+            return res.json(req.body)
+        })
+})
 
-      // TODO: explore better ways to do this!
-      if (parts.length === 3) {
-        const id = parts.pop();
-        const post = posts.getById(id).value();
+app.delete('/posts/:postId', (req, res) => {
+    Post.findByIdAndDelete(
+        req.params.postId,
+        {},
+        (error, data) => {
+            if (error) return res.sendStatus(500).json(error)
+            return res.json(data)
+        })
+})
 
-        // if a post exists with that ID,
-        if (post) {
-          ok(response, post);
-        } else {
-          // if no post found with that ID,
-          notFound(response);
-        }
-      } else {
-        // if more than 3 parts to the request url,
-        notFound(response);
-      }
-    }
-  },
-  PATCH(request, response) {
-    const parts = request.url.split("/");
+app.listen(port, () => console.log(`Example app listening of port ${port}`))
 
-    // as before, we can search the URL for an id...
-    if (parts.length === 3) {
-      // ...and construct the contents of the request data
-      let contents = "";
-      request.on("data", (chunk) => (contents += chunk));
-
-      request.on("end", () => {
-        const id = parts.pop();
-
-        // updateById returns a post only if one already exists with that ID
-        const post = db.get("posts").updateById(id, { body: contents }).write();
-
-        if (post) {
-          ok(response, post);
-        } else {
-          notFound(response);
-        }
-      });
-
-      request.on("error", () => internalServerError(response));
-    } else {
-      notFound(response);
-    }
-  },
-  DELETE(request, response) {
-    const parts = request.url.split("/");
-
-    if (parts.length === 3) {
-      const id = parts.pop();
-      // like updateById, removeById will only return a post if a post exists with that ID
-      const post = db.get("posts").removeById(id).write();
-
-      if (post) {
-        ok(response, post);
-      } else {
-        notFound(response);
-      }
-    } else {
-      notFound(response);
-    }
-  },
-};
-
-
-
-// use FileSync to create an adapter linked to a .json file
-const adapter = new FileSync(path.join(__dirname, "db.json"));
-// create a lowdb database and link it to the .json file
-const db = lowdb(adapter);
-// utilize lodashId to auto-generate unique IDs for our db entries
-db._.mixin(lodashId);
-// create a collection for blog posts and write it to the db
-db.defaults({ posts: [] }).write();
-
-
-const notFound = (response) => {
-  response.writeHead(404);
-  response.write(JSON.stringify({ message: "Not Found" }));
-  response.end();
-};
-
-const internalServerError = (response) => {
-  response.writeHead(500);
-  response.write(JSON.stringify({ message: "Internal Server Error" }));
-  response.end();
-};
-
-const ok = (response, payload) => {
-  response.writeHead(200);
-  response.write(JSON.stringify(payload));
-  response.end();
-};
